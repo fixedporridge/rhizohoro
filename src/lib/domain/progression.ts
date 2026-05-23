@@ -3,6 +3,15 @@ const CONSISTENCY_WEIGHT = 0.65;
 const MASTERY_WEIGHT = 0.35;
 const GROWTH_STAGE_EXP_STEP = 650;
 const MAX_GROWTH_STAGE = 12;
+type TreeCatalogEntry = (typeof forestThemeTokens.rngTreeTypes)[number];
+type BetaShinyBiomeConfig = typeof forestThemeTokens.betaShinyBiomeDrop;
+export type TreeTypeKey = TreeCatalogEntry["key"];
+export type TreeRarity = TreeCatalogEntry["rarity"];
+type TreeDropTableEntry = {
+  treeType: TreeTypeKey;
+  weight: number;
+};
+type BiomeTreeDropTable = readonly TreeDropTableEntry[];
 
 export interface ExpAwardInput {
   streakDays: number;
@@ -26,6 +35,24 @@ export interface ForestHealthInput {
   sessionsCompletedDelta: number;
   minutesStudiedDelta: number;
 }
+export interface MysteryTreeDrop {
+  treeType: TreeTypeKey;
+  treeName: string;
+  rarity: TreeRarity;
+  biomeKey: string;
+  dropRate: number;
+  roll: number;
+}
+export interface ShinyBiomeDrop {
+  biomeKey: BetaShinyBiomeConfig["biomeKey"];
+  label: BetaShinyBiomeConfig["label"];
+  dropRate: number;
+  roll: number;
+}
+
+const treeCatalogByKey = Object.fromEntries(
+  forestThemeTokens.rngTreeTypes.map((treeType) => [treeType.key, treeType]),
+) as Record<TreeTypeKey, TreeCatalogEntry>;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -91,6 +118,70 @@ export function calculateForestHealthScore(input: ForestHealthInput): number {
     0,
     100,
   );
+}
+
+function resolveTreeDropTableForBiome(biomeKey: string): BiomeTreeDropTable {
+  const configuredTable = (
+    forestThemeTokens.biomeTreeDropRates as Record<string, BiomeTreeDropTable>
+  )[biomeKey];
+
+  return configuredTable && configuredTable.length > 0
+    ? configuredTable
+    : forestThemeTokens.biomeTreeDropRates.seedling_meadow;
+}
+
+export function pickMysteryTreeDropForBiome(
+  biomeKey: string,
+  randomValue = Math.random(),
+): MysteryTreeDrop {
+  const dropTable = resolveTreeDropTableForBiome(biomeKey);
+  const totalWeight = dropTable.reduce((sum, entry) => sum + entry.weight, 0) || 1;
+  const boundedRoll = clamp(randomValue, 0, 0.999999);
+  const weightedRoll = boundedRoll * totalWeight;
+  let runningWeight = 0;
+  let selectedEntry = dropTable[dropTable.length - 1];
+
+  for (const entry of dropTable) {
+    runningWeight += entry.weight;
+    if (weightedRoll < runningWeight) {
+      selectedEntry = entry;
+      break;
+    }
+  }
+
+  const selectedTreeType =
+    treeCatalogByKey[selectedEntry.treeType] ??
+    forestThemeTokens.rngTreeTypes[0];
+
+  return {
+    treeType: selectedTreeType.key,
+    treeName: selectedTreeType.name,
+    rarity: selectedTreeType.rarity,
+    biomeKey,
+    dropRate: selectedEntry.weight / totalWeight,
+    roll: boundedRoll,
+  };
+}
+
+export function pickBetaShinyBiomeDrop(
+  randomValue = Math.random(),
+): ShinyBiomeDrop | null {
+  const shinyConfig = forestThemeTokens.betaShinyBiomeDrop;
+  if (!shinyConfig.enabled) {
+    return null;
+  }
+
+  const boundedRoll = clamp(randomValue, 0, 0.999999);
+  if (boundedRoll >= shinyConfig.dropRate) {
+    return null;
+  }
+
+  return {
+    biomeKey: shinyConfig.biomeKey,
+    label: shinyConfig.label,
+    dropRate: shinyConfig.dropRate,
+    roll: boundedRoll,
+  };
 }
 export function shouldDropMysterySeed(
   streakDays: number,

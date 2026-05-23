@@ -4,10 +4,13 @@ import { db } from "@/lib/db/client";
 import {
   calculateForestHealthScore,
   growthStageFromTotalExp,
+  pickBetaShinyBiomeDrop,
+  pickMysteryTreeDropForBiome,
   resolveCurrentBiomeForTotalExp,
   resolveUnlockedBiomesForTotalExp,
   shouldDropMysterySeed,
 } from "@/lib/domain/progression";
+import type { MysteryTreeDrop, ShinyBiomeDrop } from "@/lib/domain/progression";
 import { forestThemeTokens } from "@/lib/design/tokens";
 import { ServiceError } from "@/lib/services/service-error";
 
@@ -64,6 +67,8 @@ export interface UpdateUserProgressResult {
     growthStage: number;
     healthScore: number;
     mysterySeedInventory: number;
+    mysteryTreeDrop: MysteryTreeDrop | null;
+    shinyBiomeDrop: ShinyBiomeDrop | null;
     unlockedBiomes: string[];
     newlyUnlockedBiomes: string[];
     mysterySeedsAwarded: number;
@@ -188,6 +193,19 @@ export async function updateUserProgress(
   const nextStreak = Math.max(0, user.streakCount + streakDelta);
   const nextLongestStreak = Math.max(user.longestStreak, nextStreak);
   const nextConsistencyScore = Math.max(0, user.consistencyScore + consistencyDelta);
+  const nextBiomeFromExp = resolveCurrentBiomeForTotalExp(nextTotalExp);
+  const mysterySeedsAwarded =
+    mysterySeedEligibleReasons.has(input.reason) &&
+    expDelta > 0 &&
+    shouldDropMysterySeed(nextStreak)
+      ? 1
+      : 0;
+  const mysteryTreeDrop =
+    mysterySeedsAwarded > 0
+      ? pickMysteryTreeDropForBiome(nextBiomeFromExp)
+      : null;
+  const shinyBiomeDrop =
+    mysterySeedsAwarded > 0 ? pickBetaShinyBiomeDrop() : null;
 
   const materialProgressPatch = input.materialProgress
     ? {
@@ -356,16 +374,10 @@ export async function updateUserProgress(
       }
     }
 
-    const mysterySeedsAwarded =
-      mysterySeedEligibleReasons.has(input.reason) &&
-      expDelta > 0 &&
-      shouldDropMysterySeed(nextStreak)
-        ? 1
-        : 0;
 
     let nextMysterySeedInventory =
       (existingForestState?.mysterySeedInventory ?? 0) + mysterySeedsAwarded;
-    let nextBiome = resolveCurrentBiomeForTotalExp(nextTotalExp);
+    let nextBiome = nextBiomeFromExp;
     const currentBiomeIndex = forestThemeTokens.biomeLadder.findIndex(
       (biome) => biome.key === nextBiome,
     );
@@ -463,6 +475,8 @@ export async function updateUserProgress(
       unlockedBiomes,
       newlyUnlockedBiomes,
       mysterySeedsAwarded,
+      mysteryTreeDrop,
+      shinyBiomeDrop,
     };
   });
 
@@ -500,6 +514,8 @@ export async function updateUserProgress(
       growthStage: result.forestState.growthStage,
       healthScore: result.forestState.healthScore,
       mysterySeedInventory: result.forestState.mysterySeedInventory,
+      mysteryTreeDrop: result.mysteryTreeDrop,
+      shinyBiomeDrop: result.shinyBiomeDrop,
       unlockedBiomes: result.unlockedBiomes,
       newlyUnlockedBiomes: result.newlyUnlockedBiomes,
       mysterySeedsAwarded: result.mysterySeedsAwarded,
