@@ -1,0 +1,405 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MaterialType {
+  PDF
+  DOCX
+  SLIDES
+  NOTE
+  TEXT
+  LINK
+}
+
+enum ParseStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum SessionType {
+  QUICK_RECALL
+  FOCUSED_QUIZ
+  MIXED_REVISION
+  PRE_EXAM_BURST
+  TIMED_CHALLENGE
+}
+
+enum SessionOutcome {
+  COMPLETED
+  ABANDONED
+}
+
+enum ProgressReason {
+  SESSION_COMPLETE
+  STREAK_PROTECT
+  QUEST_REWARD
+  BIOME_UNLOCK
+  CHALLENGE_REWARD
+  MATERIAL_REVIEW
+  DAILY_CHECK_IN
+  ADMIN_ADJUSTMENT
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum QuestCadence {
+  DAILY
+  WEEKLY
+  SEASONAL
+  ONE_OFF
+}
+
+enum LeaderboardWindow {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+enum ChallengeMode {
+  ASYNC
+  LIVE
+}
+
+enum UserRole {
+  LEARNER
+  ADMIN
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  passwordHash         String?
+  emailVerifiedAt      DateTime?
+  displayName          String
+  avatarUrl            String?
+  role                 UserRole              @default(LEARNER)
+  locale               String                @default("en")
+  timezone             String                @default("UTC")
+  totalExp             Int                   @default(0)
+  level                Int                   @default(1)
+  streakCount          Int                   @default(0)
+  longestStreak        Int                   @default(0)
+  consistencyScore     Float                 @default(0)
+  lastActiveAt         DateTime?
+  studyGoalMinutes     Int                   @default(20)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  workspaces           StudyWorkspace[]
+  materials            StudyMaterial[]
+  cards                Card[]
+  quizzes              Quiz[]
+  learningSessions     LearningSession[]
+  challengeSessions    ChallengeSession[]
+  masteryStates        MasteryState[]
+  progressLedger       ProgressLedger[]
+  dailyProgressSnapshots DailyProgressSnapshot[]
+  materialProgress     MaterialProgress[]
+  authSessions         AuthSession[]
+  biomeUnlocks         BiomeUnlock[]
+  forestState          ForestState?
+  leaderboardSnapshots LeaderboardSnapshot[]
+  friendshipsRequested Friendship[]          @relation("FriendshipRequester")
+  friendshipsReceived  Friendship[]          @relation("FriendshipAddressee")
+}
+model AuthSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  revokedAt  DateTime?
+  ipAddress  String?
+  userAgent  String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model StudyWorkspace {
+  id          String          @id @default(cuid())
+  ownerId     String
+  name        String
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  materials   StudyMaterial[]
+
+  @@index([ownerId])
+}
+
+model StudyMaterial {
+  id           String           @id @default(cuid())
+  ownerId      String
+  workspaceId  String
+  title        String
+  description  String?
+  materialType MaterialType
+  sourceUri    String?
+  mimeType     String?
+  fileSizeBytes Int?
+  contentHash  String?
+  parseStatus  ParseStatus      @default(PENDING)
+  parseError   String?
+  tags         String[]
+  isArchived   Boolean          @default(false)
+  lastStudiedAt DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  owner        User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspace    StudyWorkspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks       KnowledgeChunk[]
+  materialProgress MaterialProgress[]
+  progressEvents ProgressLedger[]
+
+  @@index([ownerId, parseStatus])
+  @@index([workspaceId])
+  @@index([ownerId, isArchived])
+  @@index([ownerId, createdAt])
+}
+
+model KnowledgeChunk {
+  id               String         @id @default(cuid())
+  sourceMaterialId String
+  topicSlug        String
+  content          String
+  complexity       Int            @default(1)
+  embedding        Json?
+  createdAt        DateTime       @default(now())
+  sourceMaterial   StudyMaterial  @relation(fields: [sourceMaterialId], references: [id], onDelete: Cascade)
+  cards            Card[]
+  quizQuestions    QuizQuestion[]
+
+  @@index([sourceMaterialId])
+  @@index([topicSlug])
+}
+
+model Card {
+  id            String          @id @default(cuid())
+  ownerId       String
+  sourceChunkId String?
+  prompt        String
+  answer        String
+  difficulty    Float           @default(1)
+  masteryLevel  Float           @default(0)
+  dueAt         DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sourceChunk   KnowledgeChunk? @relation(fields: [sourceChunkId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, dueAt])
+}
+
+model Quiz {
+  id               String         @id @default(cuid())
+  creatorId        String
+  title            String
+  isAdaptive       Boolean        @default(true)
+  questionCount    Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  creator          User           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  questions        QuizQuestion[]
+  learningSessions LearningSession[]
+
+  @@index([creatorId])
+}
+
+model QuizQuestion {
+  id            String         @id @default(cuid())
+  quizId         String
+  sourceChunkId  String?
+  prompt         String
+  options        String[]
+  answer         String
+  explanation    String?
+  difficulty     Float          @default(1)
+  createdAt      DateTime       @default(now())
+  quiz           Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  sourceChunk    KnowledgeChunk? @relation(fields: [sourceChunkId], references: [id], onDelete: SetNull)
+
+  @@index([quizId])
+}
+
+model LearningSession {
+  id              String         @id @default(cuid())
+  userId          String
+  quizId          String?
+  sessionType     SessionType
+  outcome         SessionOutcome @default(COMPLETED)
+  durationSeconds Int
+  accuracy        Float
+  confidence      Float          @default(0)
+  expAwarded      Int            @default(0)
+  startedAt       DateTime       @default(now())
+  completedAt     DateTime?
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz            Quiz?          @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  progressEntries ProgressLedger[]
+
+  @@index([userId, startedAt])
+}
+
+model ChallengeSession {
+  id               String        @id @default(cuid())
+  userId           String
+  mode             ChallengeMode @default(ASYNC)
+  score            Int           @default(0)
+  participantCount Int           @default(1)
+  createdAt        DateTime      @default(now())
+  completedAt      DateTime?
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progressEntries  ProgressLedger[]
+
+  @@index([userId, createdAt])
+}
+
+model DailyProgressSnapshot {
+  id               String   @id @default(cuid())
+  userId           String
+  day              DateTime
+  sessionsCompleted Int     @default(0)
+  minutesStudied   Int      @default(0)
+  expEarned        Int      @default(0)
+  consistencyScore Float    @default(0)
+  masteryGain      Float    @default(0)
+  streakEnd        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day])
+}
+
+model MaterialProgress {
+  id               String        @id @default(cuid())
+  userId           String
+  materialId       String
+  completionPct    Float         @default(0)
+  confidenceScore  Float         @default(0)
+  recallStrength   Float         @default(0)
+  lastInteractionAt DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  material         StudyMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, materialId])
+  @@index([materialId])
+  @@index([userId, updatedAt])
+}
+
+model MasteryState {
+  id            String   @id @default(cuid())
+  userId        String
+  topicSlug     String
+  skillEstimate Float    @default(0)
+  confidence    Float    @default(0)
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicSlug])
+  @@index([topicSlug])
+}
+
+model ProgressLedger {
+  id                 String            @id @default(cuid())
+  userId             String
+  reason             ProgressReason
+  expDelta           Int
+  consistencyDelta   Float             @default(0)
+  masteryDelta       Float             @default(0)
+  streakDelta        Int               @default(0)
+  sessionId          String?
+  challengeSessionId String?
+  sourceMaterialId   String?
+  metadata           Json?
+  createdAt          DateTime          @default(now())
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session            LearningSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  challengeSession   ChallengeSession? @relation(fields: [challengeSessionId], references: [id], onDelete: SetNull)
+  sourceMaterial     StudyMaterial?    @relation(fields: [sourceMaterialId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([sessionId])
+  @@index([challengeSessionId])
+  @@index([sourceMaterialId])
+}
+
+model BiomeUnlock {
+  id          String   @id @default(cuid())
+  userId      String
+  biomeKey    String
+  unlockedAt  DateTime @default(now())
+  viaMystery  Boolean  @default(false)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, biomeKey])
+}
+
+model ForestState {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  currentBiome           String   @default("seedling_meadow")
+  growthStage            Int      @default(1)
+  healthScore            Float    @default(100)
+  mysterySeedInventory   Int      @default(0)
+  lastGrowthEventAt      DateTime?
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Quest {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  title       String
+  cadence     QuestCadence
+  rewardExp   Int
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Friendship {
+  id            String           @id @default(cuid())
+  requesterId   String
+  addresseeId   String
+  status        FriendshipStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  requester     User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee     User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+model LeaderboardSnapshot {
+  id               String            @id @default(cuid())
+  userId           String
+  window           LeaderboardWindow
+  capturedAt       DateTime          @default(now())
+  rank             Int
+  consistencyScore Float
+  expTotal         Int
+  masteryPoints    Int
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([window, capturedAt, rank])
+  @@index([userId, capturedAt])
+}
