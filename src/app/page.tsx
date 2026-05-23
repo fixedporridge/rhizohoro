@@ -14,7 +14,7 @@ export default function Home() {
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-6 pb-16 pt-8 md:px-10">
         <section
           id="forest-home"
-          className="overflow-hidden rounded-3xl border border-forest-200/80 bg-white/80 p-8 shadow-[0_20px_60px_-36px_rgba(27,69,38,0.6)] backdrop-blur"
+          className="scroll-mt-24 overflow-hidden rounded-3xl border border-forest-200/80 bg-white/80 p-8 shadow-[0_20px_60px_-36px_rgba(27,69,38,0.6)] backdrop-blur"
           style={{ backgroundImage: forestThemeTokens.gradients.hero }}
         >
           <p className="inline-flex rounded-full border border-forest-300 bg-forest-50 px-3 py-1 text-xs font-semibold tracking-wide text-forest-700">
@@ -37,7 +37,10 @@ export default function Home() {
             </span>
           </div>
         </section>
-        <section id="study-vault" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <section
+          id="study-vault"
+          className="scroll-mt-24 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {APP_SECTIONS.map((section) => (
             <SectionPanel
               key={section.key}
@@ -48,7 +51,7 @@ export default function Home() {
             />
           ))}
         </section>
-        <section id="study-studio" className="grid gap-5 lg:grid-cols-2">
+        <section id="study-studio" className="scroll-mt-24 grid gap-5 lg:grid-cols-2">
           <article className="rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]">
             <h2 className="text-xl font-semibold text-forest-900">
               Product pillars now encoded in scaffold
@@ -64,7 +67,7 @@ export default function Home() {
           </article>
           <article
             id="progress-map"
-            className="rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]"
+            className="scroll-mt-24 rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]"
             style={{ backgroundImage: forestThemeTokens.gradients.panel }}
           >
             <h2 className="text-xl font-semibold text-forest-900">
@@ -89,7 +92,10 @@ export default function Home() {
             </ol>
           </article>
         </section>
-        <section id="social-grove" className="rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]">
+        <section
+          id="social-grove"
+          className="scroll-mt-24 rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]"
+        >
           <h2 className="text-xl font-semibold text-forest-900">
             Social Grove MVP direction
           </h2>
@@ -101,6 +107,18 @@ export default function Home() {
         </section>
         <section id="quiz-preview">
           <MaterialUploadQuizWorkbench />
+        </section>
+        <section
+          id="profile"
+          className="scroll-mt-24 rounded-3xl border border-forest-200 bg-white/85 p-6 shadow-[0_18px_50px_-34px_rgba(27,69,38,0.55)]"
+        >
+          <h2 className="text-xl font-semibold text-forest-900">
+            Profile and personalization
+          </h2>
+          <p className="mt-3 max-w-4xl text-sm leading-7 text-forest-700/90">
+            Beta profile controls now center on account basics, study goal tuning,
+            and motivational style preferences before the full settings suite ships.
+          </p>
         </section>
       </main>
     </div>

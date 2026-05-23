@@ -19,13 +19,23 @@ export function TopNav() {
         </div>
         <nav className="hidden items-center gap-2 lg:flex">
           {APP_SECTIONS.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="rounded-full px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-forest-100 hover:text-forest-900"
-            >
-              {item.label}
-            </Link>
+            item.href.startsWith("#") ? (
+              <a
+                key={item.key}
+                href={item.href}
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-forest-100 hover:text-forest-900"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.key}
+                href={item.href}
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-forest-100 hover:text-forest-900"
+              >
+                {item.label}
+              </Link>
+            )
           ))}
         </nav>
         <div className="flex items-center gap-2">
