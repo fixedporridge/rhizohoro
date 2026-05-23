@@ -28,6 +28,20 @@ export function TopNav() {
             </Link>
           ))}
         </nav>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/auth"
+            className="rounded-full border border-forest-300 px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-forest-100 hover:text-forest-900"
+          >
+            Login
+          </Link>
+          <Link
+            href="/auth"
+            className="rounded-full bg-forest-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-forest-900"
+          >
+            Register
+          </Link>
+        </div>
       </div>
     </header>
   );
