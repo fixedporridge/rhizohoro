@@ -1,6 +1,14 @@
 import { ProgressReason, Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db/client";
+import {
+  calculateForestHealthScore,
+  growthStageFromTotalExp,
+  resolveCurrentBiomeForTotalExp,
+  resolveUnlockedBiomesForTotalExp,
+  shouldDropMysterySeed,
+} from "@/lib/domain/progression";
+import { forestThemeTokens } from "@/lib/design/tokens";
 import { ServiceError } from "@/lib/services/service-error";
 
 type MaterialProgressPatch = {
@@ -51,6 +59,16 @@ export interface UpdateUserProgressResult {
     recallStrength: number;
     lastInteractionAt: string | null;
   } | null;
+  forestProgress: {
+    currentBiome: string;
+    growthStage: number;
+    healthScore: number;
+    mysterySeedInventory: number;
+    unlockedBiomes: string[];
+    newlyUnlockedBiomes: string[];
+    mysterySeedsAwarded: number;
+    lastGrowthEventAt: string | null;
+  };
 }
 
 function toUtcDay(date: Date): Date {
@@ -81,6 +99,12 @@ function inferSessionsCompletedDelta(input: UpdateUserProgressInput): number {
 
   return 0;
 }
+
+const mysterySeedEligibleReasons = new Set<ProgressReason>([
+  ProgressReason.SESSION_COMPLETE,
+  ProgressReason.CHALLENGE_REWARD,
+  ProgressReason.DAILY_CHECK_IN,
+]);
 
 export async function updateUserProgress(
   input: UpdateUserProgressInput,
@@ -301,11 +325,144 @@ export async function updateUserProgress(
       });
     }
 
+    const existingForestState = await tx.forestState.findUnique({
+      where: { userId: input.userId },
+      select: {
+        currentBiome: true,
+        growthStage: true,
+        healthScore: true,
+        mysterySeedInventory: true,
+        lastGrowthEventAt: true,
+      },
+    });
+
+    const existingBiomeUnlocks = await tx.biomeUnlock.findMany({
+      where: { userId: input.userId },
+      select: { biomeKey: true },
+      orderBy: { unlockedAt: "asc" },
+    });
+
+    const unlockedBiomeSet = new Set(
+      existingBiomeUnlocks.map((unlock) => unlock.biomeKey),
+    );
+    const newlyUnlockedBiomes: string[] = [];
+    const unlockEntries: Array<{ biomeKey: string; viaMystery: boolean }> = [];
+
+    for (const biomeKey of resolveUnlockedBiomesForTotalExp(nextTotalExp)) {
+      if (!unlockedBiomeSet.has(biomeKey)) {
+        unlockedBiomeSet.add(biomeKey);
+        newlyUnlockedBiomes.push(biomeKey);
+        unlockEntries.push({ biomeKey, viaMystery: false });
+      }
+    }
+
+    const mysterySeedsAwarded =
+      mysterySeedEligibleReasons.has(input.reason) &&
+      expDelta > 0 &&
+      shouldDropMysterySeed(nextStreak)
+        ? 1
+        : 0;
+
+    let nextMysterySeedInventory =
+      (existingForestState?.mysterySeedInventory ?? 0) + mysterySeedsAwarded;
+    let nextBiome = resolveCurrentBiomeForTotalExp(nextTotalExp);
+    const currentBiomeIndex = forestThemeTokens.biomeLadder.findIndex(
+      (biome) => biome.key === nextBiome,
+    );
+
+    if (nextMysterySeedInventory >= 3 && currentBiomeIndex >= 0) {
+      const mysteryUnlockCandidate =
+        forestThemeTokens.biomeLadder[currentBiomeIndex + 1]?.key;
+
+      if (mysteryUnlockCandidate && !unlockedBiomeSet.has(mysteryUnlockCandidate)) {
+        unlockedBiomeSet.add(mysteryUnlockCandidate);
+        newlyUnlockedBiomes.push(mysteryUnlockCandidate);
+        unlockEntries.push({ biomeKey: mysteryUnlockCandidate, viaMystery: true });
+        nextBiome = mysteryUnlockCandidate;
+        nextMysterySeedInventory -= 3;
+      }
+    }
+
+    if (unlockEntries.length > 0) {
+      await tx.biomeUnlock.createMany({
+        data: unlockEntries.map((unlock) => ({
+          userId: input.userId,
+          biomeKey: unlock.biomeKey,
+          unlockedAt: now,
+          viaMystery: unlock.viaMystery,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const orderedLadderKeys = new Set<string>(
+      forestThemeTokens.biomeLadder.map((biome) => biome.key),
+    );
+    const unlockedBiomes = [
+      ...forestThemeTokens.biomeLadder
+        .map((biome) => biome.key)
+        .filter((key) => unlockedBiomeSet.has(key)),
+      ...Array.from(unlockedBiomeSet)
+        .filter((key) => !orderedLadderKeys.has(key))
+        .sort((left, right) => left.localeCompare(right)),
+    ];
+
+    const nextGrowthStage = growthStageFromTotalExp(nextTotalExp);
+    const nextHealthScore = calculateForestHealthScore({
+      previousHealthScore: existingForestState?.healthScore ?? 100,
+      expDelta,
+      consistencyDelta,
+      masteryDelta,
+      streakDelta,
+      sessionsCompletedDelta,
+      minutesStudiedDelta,
+    });
+
+    const hasGrowthEvent =
+      expDelta > 0 ||
+      mysterySeedsAwarded > 0 ||
+      unlockEntries.length > 0 ||
+      !existingForestState ||
+      nextGrowthStage !== existingForestState.growthStage ||
+      nextBiome !== existingForestState.currentBiome;
+
+    const forestState = await tx.forestState.upsert({
+      where: { userId: input.userId },
+      create: {
+        userId: input.userId,
+        currentBiome: nextBiome,
+        growthStage: nextGrowthStage,
+        healthScore: nextHealthScore,
+        mysterySeedInventory: nextMysterySeedInventory,
+        lastGrowthEventAt: hasGrowthEvent ? now : null,
+      },
+      update: {
+        currentBiome: nextBiome,
+        growthStage: nextGrowthStage,
+        healthScore: nextHealthScore,
+        mysterySeedInventory: nextMysterySeedInventory,
+        lastGrowthEventAt: hasGrowthEvent
+          ? now
+          : existingForestState?.lastGrowthEventAt ?? null,
+      },
+      select: {
+        currentBiome: true,
+        growthStage: true,
+        healthScore: true,
+        mysterySeedInventory: true,
+        lastGrowthEventAt: true,
+      },
+    });
+
     return {
       updatedUser,
       progressEntry,
       dailySnapshot,
       updatedMaterialProgress,
+      forestState,
+      unlockedBiomes,
+      newlyUnlockedBiomes,
+      mysterySeedsAwarded,
     };
   });
 
@@ -338,5 +495,15 @@ export async function updateUserProgress(
             result.updatedMaterialProgress.lastInteractionAt?.toISOString() ?? null,
         }
       : null,
+    forestProgress: {
+      currentBiome: result.forestState.currentBiome,
+      growthStage: result.forestState.growthStage,
+      healthScore: result.forestState.healthScore,
+      mysterySeedInventory: result.forestState.mysterySeedInventory,
+      unlockedBiomes: result.unlockedBiomes,
+      newlyUnlockedBiomes: result.newlyUnlockedBiomes,
+      mysterySeedsAwarded: result.mysterySeedsAwarded,
+      lastGrowthEventAt: result.forestState.lastGrowthEventAt?.toISOString() ?? null,
+    },
   };
 }
