@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   shouldDropMysterySeedMock,
+  pickBetaShinyBiomeDropMock,
+  pickMysteryTreeDropForBiomeMock,
   userFindUniqueMock,
   learningSessionFindUniqueMock,
   challengeSessionFindUniqueMock,
@@ -19,6 +21,8 @@ const {
   biomeUnlockCreateManyMock,
 } = vi.hoisted(() => ({
   shouldDropMysterySeedMock: vi.fn(),
+  pickBetaShinyBiomeDropMock: vi.fn(),
+  pickMysteryTreeDropForBiomeMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
   learningSessionFindUniqueMock: vi.fn(),
   challengeSessionFindUniqueMock: vi.fn(),
@@ -43,6 +47,8 @@ vi.mock("@/lib/domain/progression", async () => {
   return {
     ...actual,
     shouldDropMysterySeed: shouldDropMysterySeedMock,
+    pickBetaShinyBiomeDrop: pickBetaShinyBiomeDropMock,
+    pickMysteryTreeDropForBiome: pickMysteryTreeDropForBiomeMock,
   };
 });
 
@@ -126,6 +132,15 @@ describe("updateUserProgress forest progression", () => {
     biomeUnlockRows = [];
 
     shouldDropMysterySeedMock.mockReturnValue(false);
+    pickBetaShinyBiomeDropMock.mockReturnValue(null);
+    pickMysteryTreeDropForBiomeMock.mockImplementation((biomeKey: string) => ({
+      treeType: "cedar",
+      treeName: "Midnight Cedar",
+      rarity: "common",
+      biomeKey,
+      dropRate: 0.55,
+      roll: 0.2,
+    }));
     userFindUniqueMock.mockResolvedValue({
       id: "user-1",
       totalExp: 0,
@@ -231,6 +246,12 @@ describe("updateUserProgress forest progression", () => {
 
   it("unlocks threshold biomes and awards mystery seeds for qualifying progress", async () => {
     shouldDropMysterySeedMock.mockReturnValue(true);
+    pickBetaShinyBiomeDropMock.mockReturnValue({
+      biomeKey: "astral_grove",
+      label: "Shiny Astral Grove",
+      dropRate: 0.015,
+      roll: 0.01,
+    });
     userFindUniqueMock.mockResolvedValue({
       id: "user-1",
       totalExp: 0,
@@ -263,6 +284,18 @@ describe("updateUserProgress forest progression", () => {
     ]);
     expect(result.forestProgress.mysterySeedsAwarded).toBe(1);
     expect(result.forestProgress.mysterySeedInventory).toBe(1);
+    expect(result.forestProgress.mysteryTreeDrop).toMatchObject({
+      treeType: "cedar",
+      biomeKey: "riverlight_basin",
+    });
+    expect(result.forestProgress.shinyBiomeDrop).toMatchObject({
+      biomeKey: "astral_grove",
+      label: "Shiny Astral Grove",
+    });
+    expect(pickMysteryTreeDropForBiomeMock).toHaveBeenCalledWith(
+      "riverlight_basin",
+    );
+    expect(pickBetaShinyBiomeDropMock).toHaveBeenCalledTimes(1);
     expect(biomeUnlockCreateManyMock).toHaveBeenCalledTimes(1);
   });
 
@@ -302,6 +335,11 @@ describe("updateUserProgress forest progression", () => {
     expect(result.forestProgress.newlyUnlockedBiomes).toEqual(["riverlight_basin"]);
     expect(result.forestProgress.mysterySeedsAwarded).toBe(1);
     expect(result.forestProgress.mysterySeedInventory).toBe(0);
+    expect(result.forestProgress.mysteryTreeDrop).toMatchObject({
+      treeType: "cedar",
+      biomeKey: "canopy_glade",
+    });
+    expect(result.forestProgress.shinyBiomeDrop).toBeNull();
     expect(biomeUnlockCreateManyMock).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
@@ -350,10 +388,14 @@ describe("updateUserProgress forest progression", () => {
     ]);
     expect(result.forestProgress.newlyUnlockedBiomes).toEqual([]);
     expect(result.forestProgress.mysterySeedInventory).toBe(1);
+    expect(result.forestProgress.mysteryTreeDrop).toBeNull();
+    expect(result.forestProgress.shinyBiomeDrop).toBeNull();
     expect(result.forestProgress.lastGrowthEventAt).toBe(
       priorGrowthEvent.toISOString(),
     );
     expect(biomeUnlockCreateManyMock).not.toHaveBeenCalled();
     expect(shouldDropMysterySeedMock).not.toHaveBeenCalled();
+    expect(pickMysteryTreeDropForBiomeMock).not.toHaveBeenCalled();
+    expect(pickBetaShinyBiomeDropMock).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateForestHealthScore,
   growthStageFromTotalExp,
+  pickBetaShinyBiomeDrop,
+  pickMysteryTreeDropForBiome,
   resolveCurrentBiomeForTotalExp,
   resolveUnlockedBiomesForTotalExp,
   shouldDropMysterySeed,
@@ -58,5 +60,27 @@ describe("progression domain helpers", () => {
     expect(shouldDropMysterySeed(0, 0.06)).toBe(false);
     expect(shouldDropMysterySeed(100, 0.29)).toBe(true);
     expect(shouldDropMysterySeed(100, 0.31)).toBe(false);
+  });
+
+  it("selects mystery tree types using biome-specific weighted drop tables", () => {
+    expect(pickMysteryTreeDropForBiome("seedling_meadow", 0.1).treeType).toBe("cedar");
+    expect(pickMysteryTreeDropForBiome("seedling_meadow", 0.7).treeType).toBe("oak");
+    expect(pickMysteryTreeDropForBiome("seedling_meadow", 0.95).treeType).toBe("pine");
+    expect(pickMysteryTreeDropForBiome("canopy_glade", 0.99).treeType).toBe("sakura");
+    expect(pickMysteryTreeDropForBiome("riverlight_basin", 0.75).treeType).toBe(
+      "maple",
+    );
+  });
+
+  it("falls back to the default biome drop table when biome key is unknown", () => {
+    expect(pickMysteryTreeDropForBiome("unknown_biome", 0.2).treeType).toBe("cedar");
+  });
+
+  it("supports a single beta shiny-biome drop at a rare configured rate", () => {
+    expect(pickBetaShinyBiomeDrop(0.01)).toMatchObject({
+      biomeKey: "astral_grove",
+      label: "Shiny Astral Grove",
+    });
+    expect(pickBetaShinyBiomeDrop(0.99)).toBeNull();
   });
 });
