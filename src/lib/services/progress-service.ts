@@ -76,6 +76,93 @@ export interface UpdateUserProgressResult {
   };
 }
 
+export interface UserProgressSnapshotResult {
+  user: {
+    id: string;
+    totalExp: number;
+    level: number;
+    streakCount: number;
+    longestStreak: number;
+    consistencyScore: number;
+    lastActiveAt: string | null;
+  };
+  forestProgress: {
+    currentBiome: string;
+    growthStage: number;
+    healthScore: number;
+    mysterySeedInventory: number;
+    unlockedBiomes: string[];
+    lastGrowthEventAt: string | null;
+  };
+}
+
+export async function getUserProgressSnapshot(
+  userId: string,
+): Promise<UserProgressSnapshotResult> {
+  const [user, forestState, biomeUnlocks] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        totalExp: true,
+        level: true,
+        streakCount: true,
+        longestStreak: true,
+        consistencyScore: true,
+        lastActiveAt: true,
+      },
+    }),
+    db.forestState.findUnique({
+      where: { userId },
+      select: {
+        currentBiome: true,
+        growthStage: true,
+        healthScore: true,
+        mysterySeedInventory: true,
+        lastGrowthEventAt: true,
+      },
+    }),
+    db.biomeUnlock.findMany({
+      where: { userId },
+      select: { biomeKey: true },
+      orderBy: { unlockedAt: "asc" },
+    }),
+  ]);
+
+  if (!user) {
+    throw new ServiceError("User not found.", {
+      statusCode: 404,
+      code: "USER_NOT_FOUND",
+    });
+  }
+
+  const defaultBiome = forestThemeTokens.biomeLadder[0]?.key ?? "seedling_meadow";
+  const unlockedBiomes =
+    biomeUnlocks.length > 0
+      ? biomeUnlocks.map((unlock) => unlock.biomeKey)
+      : [defaultBiome];
+
+  return {
+    user: {
+      id: user.id,
+      totalExp: user.totalExp,
+      level: user.level,
+      streakCount: user.streakCount,
+      longestStreak: user.longestStreak,
+      consistencyScore: user.consistencyScore,
+      lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
+    },
+    forestProgress: {
+      currentBiome: forestState?.currentBiome ?? defaultBiome,
+      growthStage: forestState?.growthStage ?? 1,
+      healthScore: forestState?.healthScore ?? 100,
+      mysterySeedInventory: forestState?.mysterySeedInventory ?? 0,
+      unlockedBiomes,
+      lastGrowthEventAt: forestState?.lastGrowthEventAt?.toISOString() ?? null,
+    },
+  };
+}
+
 function toUtcDay(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
@@ -110,7 +197,6 @@ const mysterySeedEligibleReasons = new Set<ProgressReason>([
   ProgressReason.CHALLENGE_REWARD,
   ProgressReason.DAILY_CHECK_IN,
 ]);
-
 export async function updateUserProgress(
   input: UpdateUserProgressInput,
 ): Promise<UpdateUserProgressResult> {

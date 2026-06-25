@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { updateUserProgress } from "@/lib/services/progress-service";
+import {
+  getUserProgressSnapshot,
+  updateUserProgress,
+} from "@/lib/services/progress-service";
 import { isServiceError } from "@/lib/services/service-error";
 
 const progressUpdatePayloadSchema = z
@@ -36,6 +39,37 @@ const progressUpdatePayloadSchema = z
       });
     }
   });
+
+export async function GET(request: NextRequest) {
+  try {
+    const authUser = await requireAuthenticatedUser(request);
+    const snapshot = await getUserProgressSnapshot(authUser.id);
+    return NextResponse.json({
+      ok: true,
+      data: snapshot,
+    });
+  } catch (error) {
+    if (isServiceError(error)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error.message,
+          code: error.code,
+          details: error.details,
+        },
+        { status: error.statusCode },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Unexpected server error.",
+      },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);

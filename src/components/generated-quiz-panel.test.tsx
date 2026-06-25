@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -50,22 +51,45 @@ describe("GeneratedQuizPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders quiz metadata and questions with highlighted answers", () => {
+  it("keeps answers hidden until check and supports interactive attempts", async () => {
     render(
       <GeneratedQuizPanel materialTitle="Cell respiration notes" quiz={quizFixture} />,
     );
+    const user = userEvent.setup();
 
     expect(
       screen.getByRole("heading", { name: "Cell respiration notes - Initial Quiz" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/2 questions/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 questions • Provider: mock •/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Provider: mock/i)).toBeInTheDocument();
     expect(screen.getByText("Q1. Where does glycolysis begin?")).toBeInTheDocument();
+    expect(
+      screen.queryByText("The source text states glycolysis starts in the cytoplasm."),
+    ).not.toBeInTheDocument();
 
-    const correctAnswerOption = screen.getByText("In the cytoplasm");
-    expect(correctAnswerOption.closest("li")).toHaveClass("border-moss-500/50");
+    const checkAnswersButton = screen.getByRole("button", {
+      name: "Check answers",
+    });
+    expect(checkAnswersButton).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: /A\.\s*In the nucleus/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /A\.\s*Final electron acceptor/i }),
+    );
+    expect(checkAnswersButton).toBeEnabled();
+
+    await user.click(checkAnswersButton);
+
     expect(
       screen.getByText("The source text states glycolysis starts in the cytoplasm."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Not quite. Correct answer: In the cytoplasm"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Score: 1/2")).toBeInTheDocument();
   });
 });

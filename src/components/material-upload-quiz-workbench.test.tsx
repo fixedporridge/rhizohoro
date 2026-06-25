@@ -58,7 +58,6 @@ describe("MaterialUploadQuizWorkbench", () => {
     render(<MaterialUploadQuizWorkbench />);
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText("Workspace ID"), "workspace-123");
     await user.type(screen.getByLabelText("Material title"), "Cell respiration notes");
     await user.type(
       screen.getByLabelText("Uploaded material text"),
@@ -74,7 +73,6 @@ describe("MaterialUploadQuizWorkbench", () => {
     expect(requestInit?.method).toBe("POST");
     expect(requestInit?.credentials).toBe("include");
     expect(JSON.parse(String(requestInit?.body))).toMatchObject({
-      workspaceId: "workspace-123",
       title: "Cell respiration notes",
       sourceType: "text",
     });
@@ -110,7 +108,6 @@ describe("MaterialUploadQuizWorkbench", () => {
     render(<MaterialUploadQuizWorkbench />);
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText("Workspace ID"), "workspace-999");
     await user.type(screen.getByLabelText("Material title"), "No quiz material");
     await user.type(
       screen.getByLabelText("Uploaded material text"),

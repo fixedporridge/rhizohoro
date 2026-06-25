@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { APP_SECTIONS } from "@/config/navigation";
+import { forestThemeTokens } from "@/lib/design/tokens";
 
 type AuthNavUser = {
   id: string;
@@ -20,6 +21,39 @@ type MeResponseBody = {
   };
 };
 
+type ProgressSnapshot = {
+  user: {
+    totalExp: number;
+    level: number;
+    streakCount: number;
+  };
+  forestProgress: {
+    currentBiome: string;
+    growthStage: number;
+    healthScore: number;
+    unlockedBiomes: string[];
+  };
+};
+
+type ProgressResponseBody = {
+  ok?: boolean;
+  data?: ProgressSnapshot;
+};
+
+const biomeNameByKey = new Map<string, string>(
+  forestThemeTokens.biomeLadder.map((biome) => [biome.key, biome.name]),
+);
+
+function formatBiomeLabel(biomeKey: string): string {
+  return (
+    biomeNameByKey.get(biomeKey) ??
+    biomeKey
+      .split("_")
+      .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+      .join(" ")
+  );
+}
+
 const navLinkClassName =
   "rounded-full px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-forest-100 hover:text-forest-900";
 const mobileNavLinkClassName =
@@ -28,6 +62,7 @@ const mobileNavLinkClassName =
 export function TopNav() {
   const router = useRouter();
   const [authUser, setAuthUser] = useState<AuthNavUser | null>(null);
+  const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -45,6 +80,7 @@ export function TopNav() {
         if (!response.ok) {
           if (!cancelled) {
             setAuthUser(null);
+            setProgressSnapshot(null);
           }
           return;
         }
@@ -58,6 +94,7 @@ export function TopNav() {
       } catch {
         if (!cancelled) {
           setAuthUser(null);
+          setProgressSnapshot(null);
         }
       } finally {
         if (!cancelled) {
@@ -73,6 +110,49 @@ export function TopNav() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProgress() {
+      if (!authUser) {
+        setProgressSnapshot(null);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/progress", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setProgressSnapshot(null);
+          }
+          return;
+        }
+
+        const body = (await response
+          .json()
+          .catch(() => null)) as ProgressResponseBody | null;
+        if (!cancelled) {
+          setProgressSnapshot(body?.ok && body.data ? body.data : null);
+        }
+      } catch {
+        if (!cancelled) {
+          setProgressSnapshot(null);
+        }
+      }
+    }
+
+    void loadProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser]);
+
   const handleLogout = useCallback(async () => {
     if (isLoggingOut) {
       return;
@@ -86,6 +166,7 @@ export function TopNav() {
       });
     } finally {
       setAuthUser(null);
+      setProgressSnapshot(null);
       setIsLoadingSession(false);
       setIsLoggingOut(false);
       router.refresh();
@@ -158,6 +239,24 @@ export function TopNav() {
           )}
         </div>
       </div>
+      {authUser && progressSnapshot ? (
+        <div className="mx-auto w-full max-w-6xl px-6 pb-3 md:px-10">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <span className="shrink-0 rounded-full border border-forest-300 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-800">
+              EXP {progressSnapshot.user.totalExp}
+            </span>
+            <span className="shrink-0 rounded-full border border-forest-300 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-800">
+              Trees {progressSnapshot.forestProgress.growthStage}
+            </span>
+            <span className="shrink-0 rounded-full border border-forest-300 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-800">
+              Biome {formatBiomeLabel(progressSnapshot.forestProgress.currentBiome)}
+            </span>
+            <span className="shrink-0 rounded-full border border-forest-300 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-800">
+              Forest {Math.round(progressSnapshot.forestProgress.healthScore)}%
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       <nav className="mx-auto w-full max-w-6xl px-6 pb-3 md:px-10 lg:hidden">
         <div className="flex gap-2 overflow-x-auto pb-1">

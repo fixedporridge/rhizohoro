@@ -8,7 +8,6 @@ import {
 } from "@/components/generated-quiz-panel";
 
 type UploadFormState = {
-  workspaceId: string;
   title: string;
   rawText: string;
   sourceType: "text" | "note" | "pdf" | "docx" | "slides" | "link";
@@ -31,7 +30,6 @@ type UploadResultState = {
 };
 
 const INITIAL_FORM_STATE: UploadFormState = {
-  workspaceId: "",
   title: "",
   rawText: "",
   sourceType: "text",
@@ -46,11 +44,9 @@ export function MaterialUploadQuizWorkbench() {
   const canSubmit = useMemo(
     () =>
       Boolean(
-        form.workspaceId.trim() &&
-          form.title.trim() &&
-          form.rawText.trim().length >= 20,
+        form.title.trim() && form.rawText.trim().length >= 20,
       ),
-    [form.rawText, form.title, form.workspaceId],
+    [form.rawText, form.title],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -70,7 +66,6 @@ export function MaterialUploadQuizWorkbench() {
         },
         credentials: "include",
         body: JSON.stringify({
-          workspaceId: form.workspaceId.trim(),
           title: form.title.trim(),
           sourceType: form.sourceType,
           rawText: form.rawText.trim(),
@@ -110,27 +105,11 @@ export function MaterialUploadQuizWorkbench() {
           Upload material and generate an initial quiz
         </h2>
         <p className="mt-2 text-sm leading-6 text-forest-700/90">
-          Paste uploaded material text, submit it, and preview the generated
-          quiz questions immediately.
+          Paste uploaded material text, submit it, and preview the generated quiz
+          questions immediately. Your default Study Vault workspace is selected
+          automatically.
         </p>
         <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-forest-700/80">
-              Workspace ID
-            </span>
-            <input
-              value={form.workspaceId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  workspaceId: event.target.value,
-                }))
-              }
-              placeholder="cuid workspace id"
-              className="mt-1 w-full rounded-xl border border-forest-200 bg-white px-3 py-2 text-sm text-forest-900 outline-none transition focus:border-forest-300 focus:ring-2 focus:ring-forest-200/60"
-              required
-            />
-          </label>
           <label className="block">
             <span className="text-xs font-semibold uppercase tracking-wide text-forest-700/80">
               Material title
