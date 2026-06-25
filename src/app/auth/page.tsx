@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 
 type AuthMode = "login" | "register";
 
@@ -21,15 +21,30 @@ type AuthResponseBody = {
   };
 };
 
-export default function AuthPage() {
+function resolveAuthMode(modeParam: string | null): AuthMode {
+  return modeParam === "register" ? "register" : "login";
+}
+
+function AuthPageContent() {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("login");
+  const searchParams = useSearchParams();
+  const mode = resolveAuthMode(searchParams.get("mode"));
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthResultUser | null>(null);
+
+  function setMode(nextMode: AuthMode) {
+    setError(null);
+    if (nextMode === mode) {
+      return;
+    }
+    router.replace(nextMode === "register" ? "/auth?mode=register" : "/auth", {
+      scroll: false,
+    });
+  }
 
   const canSubmit = useMemo(() => {
     if (!email.trim() || !password.trim()) {
@@ -110,10 +125,7 @@ export default function AuthPage() {
         <div className="mt-5 inline-flex rounded-full border border-forest-200 bg-forest-50 p-1">
           <button
             type="button"
-            onClick={() => {
-              setMode("login");
-              setError(null);
-            }}
+            onClick={() => setMode("login")}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
               mode === "login"
                 ? "bg-forest-700 text-white"
@@ -124,10 +136,7 @@ export default function AuthPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setMode("register");
-              setError(null);
-            }}
+            onClick={() => setMode("register")}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
               mode === "register"
                 ? "bg-forest-700 text-white"
@@ -229,5 +238,23 @@ export default function AuthPage() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function AuthPageLoading() {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-lg items-center px-6 py-10">
+      <section className="w-full rounded-3xl border border-forest-200 bg-white/90 p-7 shadow-[0_22px_60px_-36px_rgba(27,69,38,0.55)]">
+        <p className="text-sm text-forest-700/90">Loading authentication...</p>
+      </section>
+    </main>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<AuthPageLoading />}>
+      <AuthPageContent />
+    </Suspense>
   );
 }

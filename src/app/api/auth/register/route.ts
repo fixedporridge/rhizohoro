@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         { status: error.statusCode },
       );
     }
+    console.error("Register error:", error);
 
     return NextResponse.json(
       {

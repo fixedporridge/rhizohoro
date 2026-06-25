@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.error("Login error:", error);
     return NextResponse.json(
       {
         ok: false,
