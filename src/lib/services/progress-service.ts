@@ -1,4 +1,4 @@
-import { ProgressReason, Prisma } from "@prisma/client";
+import { ProgressReason, Prisma, StudyEventType } from "@prisma/client";
 
 import { db } from "@/lib/db/client";
 import {
@@ -18,6 +18,32 @@ type MaterialProgressPatch = {
   completionPct?: number;
   confidenceScore?: number;
   recallStrength?: number;
+};
+interface UserMetricsSnapshot {
+  studyMinutes: number;
+  quizzesCompleted: number;
+  accuracyScore: number;
+  streakDays: number;
+  totalExp: number;
+  forestHealth: number;
+  growthStage: number;
+  currentBiome: string;
+  biomeUnlockCount: number;
+  lastEventAt: string | null;
+  updatedAt: string | null;
+}
+type PersistedUserMetricsRow = {
+  studyMinutes: number;
+  quizzesCompleted: number;
+  accuracyScore: number;
+  streakDays: number;
+  totalExp: number;
+  forestHealth: number;
+  growthStage: number;
+  currentBiome: string;
+  biomeUnlockCount: number;
+  lastEventAt: Date | null;
+  updatedAt: Date | null;
 };
 
 export interface UpdateUserProgressInput {
@@ -47,6 +73,7 @@ export interface UpdateUserProgressResult {
     lastActiveAt: string | null;
   };
   progressEntryId: string;
+  studyEventId: string;
   dailySnapshot: {
     day: string;
     sessionsCompleted: number;
@@ -74,6 +101,7 @@ export interface UpdateUserProgressResult {
     mysterySeedsAwarded: number;
     lastGrowthEventAt: string | null;
   };
+  metrics: UserMetricsSnapshot;
 }
 
 export interface UserProgressSnapshotResult {
@@ -94,6 +122,7 @@ export interface UserProgressSnapshotResult {
     unlockedBiomes: string[];
     lastGrowthEventAt: string | null;
   };
+  metrics: UserMetricsSnapshot;
 }
 
 export async function getUserProgressSnapshot(
@@ -128,6 +157,29 @@ export async function getUserProgressSnapshot(
       orderBy: { unlockedAt: "asc" },
     }),
   ]);
+  let userMetrics: PersistedUserMetricsRow | null = null;
+  try {
+    userMetrics = await db.userMetrics.findUnique({
+      where: { userId },
+      select: {
+        studyMinutes: true,
+        quizzesCompleted: true,
+        accuracyScore: true,
+        streakDays: true,
+        totalExp: true,
+        forestHealth: true,
+        growthStage: true,
+        currentBiome: true,
+        biomeUnlockCount: true,
+        lastEventAt: true,
+        updatedAt: true,
+      },
+    });
+  } catch (error) {
+    if (!isMissingGamificationTableError(error)) {
+      throw error;
+    }
+  }
 
   if (!user) {
     throw new ServiceError("User not found.", {
@@ -141,6 +193,9 @@ export async function getUserProgressSnapshot(
     biomeUnlocks.length > 0
       ? biomeUnlocks.map((unlock) => unlock.biomeKey)
       : [defaultBiome];
+  const currentBiome = forestState?.currentBiome ?? defaultBiome;
+  const growthStage = forestState?.growthStage ?? 1;
+  const healthScore = forestState?.healthScore ?? 100;
 
   return {
     user: {
@@ -153,12 +208,25 @@ export async function getUserProgressSnapshot(
       lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
     },
     forestProgress: {
-      currentBiome: forestState?.currentBiome ?? defaultBiome,
-      growthStage: forestState?.growthStage ?? 1,
-      healthScore: forestState?.healthScore ?? 100,
+      currentBiome,
+      growthStage,
+      healthScore,
       mysterySeedInventory: forestState?.mysterySeedInventory ?? 0,
       unlockedBiomes,
       lastGrowthEventAt: forestState?.lastGrowthEventAt?.toISOString() ?? null,
+    },
+    metrics: {
+      studyMinutes: userMetrics?.studyMinutes ?? 0,
+      quizzesCompleted: userMetrics?.quizzesCompleted ?? 0,
+      accuracyScore: userMetrics?.accuracyScore ?? 0,
+      streakDays: userMetrics?.streakDays ?? user.streakCount,
+      totalExp: userMetrics?.totalExp ?? user.totalExp,
+      forestHealth: userMetrics?.forestHealth ?? healthScore,
+      growthStage: userMetrics?.growthStage ?? growthStage,
+      currentBiome: userMetrics?.currentBiome ?? currentBiome,
+      biomeUnlockCount: userMetrics?.biomeUnlockCount ?? unlockedBiomes.length,
+      lastEventAt: userMetrics?.lastEventAt?.toISOString() ?? null,
+      updatedAt: userMetrics?.updatedAt?.toISOString() ?? null,
     },
   };
 }
@@ -191,6 +259,61 @@ function inferSessionsCompletedDelta(input: UpdateUserProgressInput): number {
 
   return 0;
 }
+function mapProgressReasonToStudyEventType(
+  input: UpdateUserProgressInput,
+): StudyEventType {
+  if (input.reason === ProgressReason.MATERIAL_REVIEW) {
+    return StudyEventType.MATERIAL_REVIEWED;
+  }
+
+  if (input.reason === ProgressReason.DAILY_CHECK_IN) {
+    return StudyEventType.DAILY_CHECK_IN;
+  }
+
+  if (input.reason === ProgressReason.STREAK_PROTECT) {
+    return StudyEventType.STREAK_PROTECT;
+  }
+
+  if (input.reason === ProgressReason.ADMIN_ADJUSTMENT) {
+    return StudyEventType.ADMIN_ADJUSTMENT;
+  }
+
+  if (
+    input.reason === ProgressReason.SESSION_COMPLETE ||
+    input.reason === ProgressReason.CHALLENGE_REWARD
+  ) {
+    return StudyEventType.QUIZ_COMPLETED;
+  }
+
+  return StudyEventType.STUDY_SESSION;
+}
+function deriveAccuracySignal(input: UpdateUserProgressInput): number | null {
+  if (typeof input.materialProgress?.confidenceScore === "number") {
+    return clamp(input.materialProgress.confidenceScore, 0, 1);
+  }
+
+  if (typeof input.masteryDelta === "number") {
+    return clamp(0.5 + input.masteryDelta, 0, 1);
+  }
+
+  return null;
+}
+function isMissingGamificationTableError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return code === "P2021" || code === "P2022";
+}
+function shouldIgnoreOptionalGamificationError(error: unknown): boolean {
+  return (
+    isMissingGamificationTableError(error) ||
+    error instanceof Prisma.PrismaClientKnownRequestError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError ||
+    error instanceof Prisma.PrismaClientValidationError
+  );
+}
 
 const mysterySeedEligibleReasons = new Set<ProgressReason>([
   ProgressReason.SESSION_COMPLETE,
@@ -206,6 +329,8 @@ export async function updateUserProgress(
   const streakDelta = Math.trunc(input.streakDelta ?? 0);
   const sessionsCompletedDelta = inferSessionsCompletedDelta(input);
   const minutesStudiedDelta = Math.max(0, Math.trunc(input.minutesStudiedDelta ?? 0));
+  const eventType = mapProgressReasonToStudyEventType(input);
+  const accuracySignal = deriveAccuracySignal(input);
   const now = new Date();
   const day = toUtcDay(now);
 
@@ -347,6 +472,7 @@ export async function updateUserProgress(
         lastActiveAt: true,
       },
     });
+
 
     const dailySnapshot = await tx.dailyProgressSnapshot.upsert({
       where: {
@@ -552,6 +678,7 @@ export async function updateUserProgress(
       },
     });
 
+
     return {
       updatedUser,
       progressEntry,
@@ -566,6 +693,134 @@ export async function updateUserProgress(
     };
   });
 
+  let studyEvent: { id: string; createdAt: Date } | null = null;
+  if (db.studyEvent?.create) {
+    try {
+      studyEvent = await db.studyEvent.create({
+        data: {
+          userId: input.userId,
+          eventType,
+          payload: {
+            reason: input.reason,
+            expDelta,
+            consistencyDelta,
+            masteryDelta,
+            streakDelta,
+            sessionsCompletedDelta,
+            minutesStudiedDelta,
+          },
+          sourceMaterialId: input.sourceMaterialId ?? null,
+          learningSessionId: input.sessionId ?? null,
+          challengeSessionId: input.challengeSessionId ?? null,
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (!shouldIgnoreOptionalGamificationError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  let userMetrics: PersistedUserMetricsRow = {
+    studyMinutes: minutesStudiedDelta,
+    quizzesCompleted: sessionsCompletedDelta,
+    accuracyScore: accuracySignal ?? 0,
+    streakDays: result.updatedUser.streakCount,
+    totalExp: result.updatedUser.totalExp,
+    forestHealth: result.forestState.healthScore,
+    growthStage: result.forestState.growthStage,
+    currentBiome: result.forestState.currentBiome,
+    biomeUnlockCount: result.unlockedBiomes.length,
+    lastEventAt: studyEvent?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  if (db.userMetrics?.findUnique && db.userMetrics?.upsert) {
+    try {
+      const existingMetrics = await db.userMetrics.findUnique({
+        where: { userId: input.userId },
+        select: {
+          studyMinutes: true,
+          quizzesCompleted: true,
+          accuracyScore: true,
+          accuracySamples: true,
+        },
+      });
+
+      const nextStudyMinutes =
+        (existingMetrics?.studyMinutes ?? 0) + minutesStudiedDelta;
+      const nextQuizzesCompleted =
+        (existingMetrics?.quizzesCompleted ?? 0) + sessionsCompletedDelta;
+      const previousAccuracySamples = existingMetrics?.accuracySamples ?? 0;
+      const previousAccuracyScore = existingMetrics?.accuracyScore ?? 0;
+      const nextAccuracySamples =
+        accuracySignal === null
+          ? previousAccuracySamples
+          : previousAccuracySamples + 1;
+      const nextAccuracyScore =
+        accuracySignal === null
+          ? previousAccuracyScore
+          : clamp(
+              (previousAccuracyScore * previousAccuracySamples + accuracySignal) /
+                Math.max(1, nextAccuracySamples),
+              0,
+              1,
+            );
+
+      userMetrics = await db.userMetrics.upsert({
+        where: { userId: input.userId },
+        create: {
+          userId: input.userId,
+          studyMinutes: nextStudyMinutes,
+          quizzesCompleted: nextQuizzesCompleted,
+          accuracyScore: nextAccuracyScore,
+          accuracySamples: nextAccuracySamples,
+          streakDays: result.updatedUser.streakCount,
+          totalExp: result.updatedUser.totalExp,
+          forestHealth: result.forestState.healthScore,
+          growthStage: result.forestState.growthStage,
+          currentBiome: result.forestState.currentBiome,
+          biomeUnlockCount: result.unlockedBiomes.length,
+          lastEventAt: studyEvent?.createdAt ?? now,
+        },
+        update: {
+          studyMinutes: nextStudyMinutes,
+          quizzesCompleted: nextQuizzesCompleted,
+          accuracyScore: nextAccuracyScore,
+          accuracySamples: nextAccuracySamples,
+          streakDays: result.updatedUser.streakCount,
+          totalExp: result.updatedUser.totalExp,
+          forestHealth: result.forestState.healthScore,
+          growthStage: result.forestState.growthStage,
+          currentBiome: result.forestState.currentBiome,
+          biomeUnlockCount: result.unlockedBiomes.length,
+          lastEventAt: studyEvent?.createdAt ?? now,
+        },
+        select: {
+          studyMinutes: true,
+          quizzesCompleted: true,
+          accuracyScore: true,
+          streakDays: true,
+          totalExp: true,
+          forestHealth: true,
+          growthStage: true,
+          currentBiome: true,
+          biomeUnlockCount: true,
+          lastEventAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (error) {
+      if (!shouldIgnoreOptionalGamificationError(error)) {
+        throw error;
+      }
+    }
+  }
+
   return {
     user: {
       id: result.updatedUser.id,
@@ -577,6 +832,7 @@ export async function updateUserProgress(
       lastActiveAt: result.updatedUser.lastActiveAt?.toISOString() ?? null,
     },
     progressEntryId: result.progressEntry.id,
+    studyEventId: studyEvent?.id ?? result.progressEntry.id,
     dailySnapshot: {
       day: result.dailySnapshot.day.toISOString(),
       sessionsCompleted: result.dailySnapshot.sessionsCompleted,
@@ -606,6 +862,19 @@ export async function updateUserProgress(
       newlyUnlockedBiomes: result.newlyUnlockedBiomes,
       mysterySeedsAwarded: result.mysterySeedsAwarded,
       lastGrowthEventAt: result.forestState.lastGrowthEventAt?.toISOString() ?? null,
+    },
+    metrics: {
+      studyMinutes: userMetrics.studyMinutes,
+      quizzesCompleted: userMetrics.quizzesCompleted,
+      accuracyScore: userMetrics.accuracyScore,
+      streakDays: userMetrics.streakDays,
+      totalExp: userMetrics.totalExp,
+      forestHealth: userMetrics.forestHealth,
+      growthStage: userMetrics.growthStage,
+      currentBiome: userMetrics.currentBiome,
+      biomeUnlockCount: userMetrics.biomeUnlockCount,
+      lastEventAt: userMetrics.lastEventAt?.toISOString() ?? null,
+      updatedAt: userMetrics.updatedAt?.toISOString() ?? null,
     },
   };
 }

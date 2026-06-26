@@ -15,6 +15,9 @@ const {
   dailySnapshotUpsertMock,
   studyMaterialUpdateMock,
   materialProgressUpsertMock,
+  studyEventCreateMock,
+  userMetricsFindUniqueMock,
+  userMetricsUpsertMock,
   forestStateFindUniqueMock,
   forestStateUpsertMock,
   biomeUnlockFindManyMock,
@@ -33,6 +36,9 @@ const {
   dailySnapshotUpsertMock: vi.fn(),
   studyMaterialUpdateMock: vi.fn(),
   materialProgressUpsertMock: vi.fn(),
+  studyEventCreateMock: vi.fn(),
+  userMetricsFindUniqueMock: vi.fn(),
+  userMetricsUpsertMock: vi.fn(),
   forestStateFindUniqueMock: vi.fn(),
   forestStateUpsertMock: vi.fn(),
   biomeUnlockFindManyMock: vi.fn(),
@@ -58,6 +64,7 @@ vi.mock("@/lib/db/client", () => ({
     learningSession: { findUnique: learningSessionFindUniqueMock },
     challengeSession: { findUnique: challengeSessionFindUniqueMock },
     studyMaterial: { findUnique: studyMaterialFindUniqueMock },
+    userMetrics: { findUnique: userMetricsFindUniqueMock },
     $transaction: transactionMock,
   },
 }));
@@ -109,6 +116,11 @@ type TransactionCallback = (tx: {
   dailyProgressSnapshot: { upsert: typeof dailySnapshotUpsertMock };
   studyMaterial: { update: typeof studyMaterialUpdateMock };
   materialProgress: { upsert: typeof materialProgressUpsertMock };
+  studyEvent: { create: typeof studyEventCreateMock };
+  userMetrics: {
+    findUnique: typeof userMetricsFindUniqueMock;
+    upsert: typeof userMetricsUpsertMock;
+  };
   forestState: {
     findUnique: typeof forestStateFindUniqueMock;
     upsert: typeof forestStateUpsertMock;
@@ -181,6 +193,26 @@ describe("updateUserProgress forest progression", () => {
       recallStrength: 0,
       lastInteractionAt: new Date("2026-05-23T20:30:00.000Z"),
     });
+    studyEventCreateMock.mockResolvedValue({
+      id: "study-event-1",
+      createdAt: new Date("2026-05-23T20:30:00.000Z"),
+    });
+    userMetricsFindUniqueMock.mockResolvedValue(null);
+    userMetricsUpsertMock.mockImplementation(async (args: any) => ({
+      studyMinutes: args.update?.studyMinutes ?? args.create.studyMinutes,
+      quizzesCompleted:
+        args.update?.quizzesCompleted ?? args.create.quizzesCompleted,
+      accuracyScore: args.update?.accuracyScore ?? args.create.accuracyScore,
+      streakDays: args.update?.streakDays ?? args.create.streakDays,
+      totalExp: args.update?.totalExp ?? args.create.totalExp,
+      forestHealth: args.update?.forestHealth ?? args.create.forestHealth,
+      growthStage: args.update?.growthStage ?? args.create.growthStage,
+      currentBiome: args.update?.currentBiome ?? args.create.currentBiome,
+      biomeUnlockCount:
+        args.update?.biomeUnlockCount ?? args.create.biomeUnlockCount,
+      lastEventAt: args.update?.lastEventAt ?? args.create.lastEventAt ?? null,
+      updatedAt: new Date("2026-05-23T20:30:00.000Z"),
+    }));
 
     forestStateFindUniqueMock.mockImplementation(async () => forestStateRecord);
     forestStateUpsertMock.mockImplementation(async (args: ForestStateUpsertArgs) => {
@@ -228,6 +260,11 @@ describe("updateUserProgress forest progression", () => {
         dailyProgressSnapshot: { upsert: dailySnapshotUpsertMock },
         studyMaterial: { update: studyMaterialUpdateMock },
         materialProgress: { upsert: materialProgressUpsertMock },
+        studyEvent: { create: studyEventCreateMock },
+        userMetrics: {
+          findUnique: userMetricsFindUniqueMock,
+          upsert: userMetricsUpsertMock,
+        },
         forestState: {
           findUnique: forestStateFindUniqueMock,
           upsert: forestStateUpsertMock,
@@ -397,5 +434,34 @@ describe("updateUserProgress forest progression", () => {
     expect(shouldDropMysterySeedMock).not.toHaveBeenCalled();
     expect(pickMysteryTreeDropForBiomeMock).not.toHaveBeenCalled();
     expect(pickBetaShinyBiomeDropMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps core progression working when optional gamification tables are missing", async () => {
+    userFindUniqueMock.mockResolvedValue({
+      id: "user-1",
+      totalExp: 200,
+      streakCount: 2,
+      longestStreak: 4,
+      consistencyScore: 7,
+    });
+    studyEventCreateMock.mockRejectedValue({ code: "P2021" });
+    userMetricsFindUniqueMock.mockRejectedValue({ code: "P2021" });
+
+    const result = await updateUserProgress({
+      userId: "user-1",
+      reason: ProgressReason.SESSION_COMPLETE,
+      expDelta: 250,
+      consistencyDelta: 1,
+      masteryDelta: 0.1,
+      streakDelta: 1,
+      sessionsCompletedDelta: 1,
+      minutesStudiedDelta: 20,
+    });
+
+    expect(result.user.totalExp).toBe(450);
+    expect(result.studyEventId).toBe("ledger-entry-1");
+    expect(result.forestProgress.currentBiome).toBeDefined();
+    expect(result.forestProgress.healthScore).toBeGreaterThan(0);
+    expect(userMetricsUpsertMock).not.toHaveBeenCalled();
   });
 });
