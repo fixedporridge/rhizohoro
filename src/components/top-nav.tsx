@@ -39,6 +39,13 @@ type ProgressResponseBody = {
   ok?: boolean;
   data?: ProgressSnapshot;
 };
+type ProgressUpdateResponseBody = {
+  ok?: boolean;
+  data?: {
+    user?: ProgressSnapshot["user"];
+    forestProgress?: ProgressSnapshot["forestProgress"];
+  };
+};
 
 const biomeNameByKey = new Map<string, string>(
   forestThemeTokens.biomeLadder.map((biome) => [biome.key, biome.name]),
@@ -64,6 +71,7 @@ export function TopNav() {
   const [authUser, setAuthUser] = useState<AuthNavUser | null>(null);
   const [progressSnapshot, setProgressSnapshot] = useState<ProgressSnapshot | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const [isApplyingProgress, setIsApplyingProgress] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -110,39 +118,38 @@ export function TopNav() {
     };
   }, []);
 
+  const fetchProgressSnapshot = useCallback(async (): Promise<ProgressSnapshot | null> => {
+    if (!authUser) {
+      return null;
+    }
+
+    try {
+      const response = await fetch("/api/progress", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const body = (await response
+        .json()
+        .catch(() => null)) as ProgressResponseBody | null;
+      return body?.ok && body.data ? body.data : null;
+    } catch {
+      return null;
+    }
+  }, [authUser]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadProgress() {
-      if (!authUser) {
-        setProgressSnapshot(null);
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/progress", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          if (!cancelled) {
-            setProgressSnapshot(null);
-          }
-          return;
-        }
-
-        const body = (await response
-          .json()
-          .catch(() => null)) as ProgressResponseBody | null;
-        if (!cancelled) {
-          setProgressSnapshot(body?.ok && body.data ? body.data : null);
-        }
-      } catch {
-        if (!cancelled) {
-          setProgressSnapshot(null);
-        }
+      const snapshot = await fetchProgressSnapshot();
+      if (!cancelled) {
+        setProgressSnapshot(snapshot);
       }
     }
 
@@ -151,7 +158,50 @@ export function TopNav() {
     return () => {
       cancelled = true;
     };
-  }, [authUser]);
+  }, [fetchProgressSnapshot]);
+
+  const handleCompleteSession = useCallback(async () => {
+    if (!authUser || isApplyingProgress) {
+      return;
+    }
+
+    setIsApplyingProgress(true);
+    try {
+      const response = await fetch("/api/progress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          reason: "SESSION_COMPLETE",
+          expDelta: 180,
+          consistencyDelta: 2,
+          masteryDelta: 0.1,
+          streakDelta: 1,
+          sessionsCompletedDelta: 1,
+          minutesStudiedDelta: 15,
+        }),
+      });
+
+      if (response.ok) {
+        const body = (await response
+          .json()
+          .catch(() => null)) as ProgressUpdateResponseBody | null;
+        if (body?.ok && body.data?.user && body.data.forestProgress) {
+          setProgressSnapshot({
+            user: body.data.user,
+            forestProgress: body.data.forestProgress,
+          });
+          return;
+        }
+      }
+
+      setProgressSnapshot(await fetchProgressSnapshot());
+    } catch {
+      setProgressSnapshot(await fetchProgressSnapshot());
+    } finally {
+      setIsApplyingProgress(false);
+    }
+  }, [authUser, fetchProgressSnapshot, isApplyingProgress]);
 
   const handleLogout = useCallback(async () => {
     if (isLoggingOut) {
@@ -168,6 +218,7 @@ export function TopNav() {
       setAuthUser(null);
       setProgressSnapshot(null);
       setIsLoadingSession(false);
+      setIsApplyingProgress(false);
       setIsLoggingOut(false);
       router.refresh();
     }
@@ -242,6 +293,14 @@ export function TopNav() {
       {authUser && progressSnapshot ? (
         <div className="mx-auto w-full max-w-6xl px-6 pb-3 md:px-10">
           <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={handleCompleteSession}
+              disabled={isApplyingProgress}
+              className="shrink-0 rounded-full border border-forest-300 bg-white px-3 py-1.5 text-xs font-semibold text-forest-800 transition hover:bg-forest-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isApplyingProgress ? "Growing..." : "Log session +180 EXP"}
+            </button>
             <span className="shrink-0 rounded-full border border-forest-300 bg-forest-50 px-3 py-1.5 text-xs font-semibold text-forest-800">
               EXP {progressSnapshot.user.totalExp}
             </span>
