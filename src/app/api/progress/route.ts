@@ -1,7 +1,7 @@
 import { Prisma, ProgressReason } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ProgressGuard } from "@lib/server/progress-guard";
+import { ProgressGuard } from "@/lib/server/progress-guard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import {
   getUserProgressSnapshot,
