@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --canvas: #111827;
-  --ink: #f8fafc;
+  --background: #111315;
+  --foreground: #ece9e1;
+  --canvas: #1a1d20;
+  --ink: #ece9e1;
 
-  --forest-50: #ede9fe;
-  --forest-100: #ddd6fe;
-  --forest-200: #c4b5fd;
-  --forest-300: #a78bfa;
-  --forest-500: #8b5cf6;
-  --forest-700: #6d28d9;
-  --forest-900: #4c1d95;
+  --forest-50: #e8e3d8;
+  --forest-100: #d7cfbe;
+  --forest-200: #c2b59c;
+  --forest-300: #a79578;
+  --forest-500: #8b7355;
+  --forest-700: #5d4c38;
+  --forest-900: #34281d;
 
-  --moss-500: #22d3ee;
-  --water-300: #38bdf8;
-  --sun-300: #f472b6;
-  --ember-400: #fb7185;
+  --moss-500: #5f6f52;
+  --water-300: #7d8f8a;
+  --sun-300: #c2a878;
+  --ember-400: #9b6b4d;
 }
 
 @theme inline {
@@ -52,10 +52,10 @@ body {
   min-height: 100vh;
   color: var(--ink);
   background:
-    radial-gradient(circle at 8% 12%, rgba(139, 92, 246, 0.22), transparent 34%),
-    radial-gradient(circle at 86% 18%, rgba(34, 211, 238, 0.18), transparent 36%),
-    radial-gradient(circle at 50% 90%, rgba(244, 114, 182, 0.12), transparent 30%),
-    linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    radial-gradient(circle at 10% 10%, rgba(139,115,85,0.08), transparent 35%),
+    radial-gradient(circle at 85% 15%, rgba(95,111,82,0.08), transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(194,168,120,0.05), transparent 30%),
+    linear-gradient(180deg, #111315 0%, #1a1d20 100%);
   font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
 }
 
