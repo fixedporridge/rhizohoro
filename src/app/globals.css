@@ -1,21 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f8f2;
-  --foreground: #1d2d22;
-  --canvas: #f7fbf5;
-  --ink: #1f3226;
-  --forest-50: #f2f9ed;
-  --forest-100: #e3f3d6;
-  --forest-200: #c6e8b4;
-  --forest-300: #a4d78d;
-  --forest-500: #64b875;
-  --forest-700: #2f6f43;
-  --forest-900: #1d3f29;
-  --moss-500: #4f9162;
-  --water-300: #94c8e8;
-  --sun-300: #f3d878;
-  --ember-400: #f0a15f;
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --canvas: #111827;
+  --ink: #f8fafc;
+
+  --forest-50: #ede9fe;
+  --forest-100: #ddd6fe;
+  --forest-200: #c4b5fd;
+  --forest-300: #a78bfa;
+  --forest-500: #8b5cf6;
+  --forest-700: #6d28d9;
+  --forest-900: #4c1d95;
+
+  --moss-500: #22d3ee;
+  --water-300: #38bdf8;
+  --sun-300: #f472b6;
+  --ember-400: #fb7185;
 }
 
 @theme inline {
@@ -23,6 +25,7 @@
   --color-foreground: var(--foreground);
   --color-canvas: var(--canvas);
   --color-ink: var(--ink);
+
   --color-forest-50: var(--forest-50);
   --color-forest-100: var(--forest-100);
   --color-forest-200: var(--forest-200);
@@ -30,13 +33,16 @@
   --color-forest-500: var(--forest-500);
   --color-forest-700: var(--forest-700);
   --color-forest-900: var(--forest-900);
+
   --color-moss-500: var(--moss-500);
   --color-water-300: var(--water-300);
   --color-sun-300: var(--sun-300);
   --color-ember-400: var(--ember-400);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
+
 * {
   box-sizing: border-box;
 }
@@ -46,9 +52,10 @@ body {
   min-height: 100vh;
   color: var(--ink);
   background:
-    radial-gradient(circle at 8% 12%, rgba(100, 184, 117, 0.2), transparent 34%),
-    radial-gradient(circle at 86% 18%, rgba(148, 200, 232, 0.17), transparent 36%),
-    linear-gradient(180deg, #f7fbf5 0%, #eef4ea 100%);
+    radial-gradient(circle at 8% 12%, rgba(139, 92, 246, 0.22), transparent 34%),
+    radial-gradient(circle at 86% 18%, rgba(34, 211, 238, 0.18), transparent 36%),
+    radial-gradient(circle at 50% 90%, rgba(244, 114, 182, 0.12), transparent 30%),
+    linear-gradient(180deg, #0f172a 0%, #111827 100%);
   font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
 }
 
