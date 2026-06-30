@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #dad7cd;
-  --foreground: #344e41;
-  --canvas: #f0eee8;
-  --ink: #344e41;
+  /* Main theme */
+  --background: #344e41;
+  --foreground: #dad7cd;
+  --canvas: #3a5a40;
+  --ink: #dad7cd;
 
+  /* Forest palette */
   --forest-50: #dad7cd;
   --forest-100: #c7ccb9;
   --forest-200: #a3b18a;
-  --forest-300: #7a9a74;
+  --forest-300: #7d9472;
   --forest-500: #588157;
   --forest-700: #3a5a40;
   --forest-900: #344e41;
@@ -17,7 +19,7 @@
   --moss-500: #588157;
   --water-300: #a3b18a;
   --sun-300: #dad7cd;
-  --ember-400: #3a5a40;
+  --ember-400: #588157;
 }
 
 @theme inline {
@@ -55,24 +57,24 @@ body {
   background:
     radial-gradient(
       circle at 10% 10%,
-      rgba(88, 129, 87, 0.12),
+      rgba(88, 129, 87, 0.18),
       transparent 35%
     ),
     radial-gradient(
       circle at 85% 15%,
-      rgba(163, 177, 138, 0.15),
+      rgba(163, 177, 138, 0.08),
       transparent 40%
     ),
     radial-gradient(
       circle at 50% 90%,
-      rgba(58, 90, 64, 0.08),
+      rgba(218, 215, 205, 0.04),
       transparent 30%
     ),
     linear-gradient(
       180deg,
-      #dad7cd 0%,
-      #d1d4c7 50%,
-      #c7ccb9 100%
+      #344e41 0%,
+      #3a5a40 55%,
+      #2f4638 100%
     );
 
   font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
