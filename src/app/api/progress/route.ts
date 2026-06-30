@@ -1,7 +1,7 @@
 import { Prisma, ProgressReason } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-
+import { ProgressGuard } from "@progress-guard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import {
   getUserProgressSnapshot,
@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
+
   const parsed = progressUpdatePayloadSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -88,11 +89,23 @@ export async function POST(request: NextRequest) {
 
   try {
     const authUser = await requireAuthenticatedUser(request);
+
+    const guard = ProgressGuard.check({
+      userId: authUser.id,
+      sessionId: parsed.data.sessionId,
+      reason: parsed.data.reason,
+    });
+
+    if (guard) {
+      return NextResponse.json(guard, { status: 403 });
+    }
+
     const result = await updateUserProgress({
       ...parsed.data,
       userId: authUser.id,
       metadata: parsed.data.metadata as Prisma.InputJsonValue | undefined,
     });
+
     return NextResponse.json({
       ok: true,
       data: result,
